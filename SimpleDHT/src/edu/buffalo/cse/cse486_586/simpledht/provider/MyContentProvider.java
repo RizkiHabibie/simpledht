@@ -44,6 +44,8 @@ public class MyContentProvider extends ContentProvider {
 	private static final int SERVER_CONNECT_PORT = 11108;
 	private static final String SERVER_ADDRESS = "10.0.2.2";
 	private Node current_Node = new Node();
+	
+	private boolean isWindows = true;
 
 	public static String nodeID;
 
@@ -158,9 +160,16 @@ public class MyContentProvider extends ContentProvider {
 		}
 	}
 
+	private int getServerPort(){
+		if(isWindows){
+			return (resolvePortNumber(nodeID) - 1000);
+		}
+		return SERVER_BIND_PORT;
+	}
+	
 	private void init(){		
 		// Every node will have a server.
-		Thread serverThread = new Thread(new ServerRunnable(SERVER_BIND_PORT, nodeID));
+		Thread serverThread = new Thread(new ServerRunnable(getServerPort(), nodeID));
 		current_Node.set(nodeID, genHash(nodeID));
 		current_Node.successor = current_Node;
 		current_Node.predecessor = current_Node;
