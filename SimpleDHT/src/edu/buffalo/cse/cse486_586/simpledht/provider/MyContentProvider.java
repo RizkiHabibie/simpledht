@@ -17,6 +17,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
 
 import edu.buffalo.cse.cse486_586.simpledht.vo.MessageObject;
+import edu.buffalo.cse.cse486_586.simpledht.vo.MessageType;
 
 import android.content.ContentProvider;
 import android.content.ContentUris;
@@ -43,7 +44,7 @@ public class MyContentProvider extends ContentProvider {
 	private static final int SERVER_CONNECT_PORT = 11108;
 	private static final String SERVER_ADDRESS = "10.0.2.2";
 	private Node current_Node = new Node();
-	
+
 	public static String nodeID;
 
 	private MyDataHelper dataHelper;
@@ -119,23 +120,23 @@ public class MyContentProvider extends ContentProvider {
 		// IMPLEMENT_THIS
 		return 0;
 	}
-	
+
 	private class Node{
-		
+
 		public String node_id;
 		public String hashValue;
 		public Node successor;
 		public Node predecessor;
-		
+
 		public Node(){
-			
+
 		}
-		
+
 		public Node(String node_id, String hashValue){
 			this.node_id = node_id;
 			this.hashValue = hashValue;
 		}
-		
+
 		public void set(String node_id, String hashValue, Node successor,
 				Node predecessor) {
 			this.node_id = node_id;
@@ -147,17 +148,18 @@ public class MyContentProvider extends ContentProvider {
 			this.node_id = node_id;
 			this.hashValue = hashValue;
 		}
-		
+
 		public void setSuccessor(Node successor) {
 			this.successor = successor;
 		}
-		
+
 		public void setPredecessor(Node predecessor) {
 			this.predecessor = predecessor;
 		}
 	}
 
 	private void init(){		
+		// Every node will have a server.
 		Thread serverThread = new Thread(new ServerRunnable(SERVER_BIND_PORT, nodeID));
 		current_Node.set(nodeID, genHash(nodeID));
 		current_Node.successor = current_Node;
@@ -169,9 +171,11 @@ public class MyContentProvider extends ContentProvider {
 		catch(InterruptedException e){
 			e.printStackTrace();
 		}
-		Thread newConnection = new Thread(
-				new ClientRunnable(nodeID, SERVER_CONNECT_PORT,true, false, false, "", ""));
-		newConnection.start();
+		if(!nodeID.equals(CENTRAL_SERVER_ID)){ // If not 5554. (New Node JOIN.)
+			Thread newConnection = new Thread(
+					new ClientRunnable(nodeID, SERVER_CONNECT_PORT,true, false, false, false, MessageType.NEW_NODE_JOIN, "", ""));
+			newConnection.start();
+		}
 	}
 
 	private void storeMessage(String msg){
@@ -208,32 +212,67 @@ public class MyContentProvider extends ContentProvider {
 
 	}
 
+	private synchronized void sendMessageToOtherNode(String node_id,int port_number, MessageType messageType, String l_key, String l_value){
+		// Intentionally created new objects.
+		String key = new String(l_key);
+		String value = new String(l_value);
+		if(!nodeID.equals(CENTRAL_SERVER_ID)){ // If not 5554. (New Node JOIN.)
+			Thread newConnection = new Thread(
+					new ClientRunnable(nodeID, SERVER_CONNECT_PORT,false, false, false, false, messageType, key, value));
+			newConnection.start();
+		}
+	}
+
+	int resolvePortNumber(String node_id){
+		return Integer.parseInt(node_id)*2;
+	}
+
+	/**
+	 * Assumption that two node_id's doens't have the same hash value.
+	 * @param socket
+	 * @param msg
+	 */
 	private void newClientSocket(Socket socket, MessageObject msg){
 		if(nodeID == CENTRAL_SERVER_ID){
 			if(current_Node.hashValue.equals(current_Node.successor.hashValue)){
 				// Only one node in system. // ACCEPT REQUEST
-				Node succ = current_Node.successor;
-				// REPLY MESSAGE FIRST
+				//Node succ = current_Node.successor;
+				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.NEW_NODE_ACCEPT ,current_Node.successor.node_id,current_Node.successor.hashValue);
+				current_Node.successor = new Node(msg.getNodeId(), genHash(msg.getNodeId()));
+			}
+			else if(isHashBetweenHashes(current_Node.hashValue, current_Node.successor.hashValue, genHash(msg.getNodeId()))){
+				//Node
+				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.NEW_NODE_ACCEPT ,current_Node.successor.node_id,current_Node.successor.hashValue);
 				current_Node.successor = new Node(msg.getNodeId(), genHash(msg.getNodeId()));
 			}
 			else{
-				// CHECK if can be accepted, else reply with CONNECT_SUCC
+				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.CONNECT_NEXT_NODE ,current_Node.successor.node_id,current_Node.successor.hashValue);
 			}
+			msg.setNewClient(false);
+
 		}
 		else{
 			// curr & succ will not be equal
 			// CHECK if is between hashes (curr, succ) ACCEPT, else CONNECT_SUCC
+			if(isHashBetweenHashes(current_Node.hashValue, current_Node.successor.hashValue, genHash(msg.getNodeId()))){
+				//Node
+				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.NEW_NODE_ACCEPT ,current_Node.successor.node_id,current_Node.successor.hashValue);
+				current_Node.successor = new Node(msg.getNodeId(), genHash(msg.getNodeId()));
+			}
+			else{
+				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.CONNECT_NEXT_NODE ,current_Node.successor.node_id,current_Node.successor.hashValue);
+			}
 		}
 	}
-	
+
 	// 0-100
 	public boolean isHashBetweenHashes(String current, String next, String find){
-		if(isHashGreater(next, current) == 0 || isHashGreater(next, find) == 0 
-				|| isHashGreater(find, current) == 0){
+		if(hashCompare(next, current) == 0 || hashCompare(next, find) == 0 
+				|| hashCompare(find, current) == 0){
 			return false;
 		}
-		else if(isHashGreater(next, current) > 0){
-			if(isHashGreater(find, current) > 0 && isHashGreater(next, find) < 0){
+		else if(hashCompare(next, current) > 0){
+			if(hashCompare(find, current) > 0 && hashCompare(next, find) < 0){
 				return true;
 			}
 			else{
@@ -241,10 +280,10 @@ public class MyContentProvider extends ContentProvider {
 			}
 		}
 		else{ // 90,10
-			if(isHashGreater(find, current) > 0){ // 91
+			if(hashCompare(find, current) > 0){ // 91
 				return true;
 			}
-			else if(isHashGreater(next, find) > 0){ // 9
+			else if(hashCompare(next, find) > 0){ // 9
 				return true;
 			}
 			else{ // other
@@ -252,8 +291,8 @@ public class MyContentProvider extends ContentProvider {
 			}
 		}
 	}
-	
-	public int isHashGreater(String current, String other){
+
+	public int hashCompare(String current, String other){
 		int curLength = current.length();
 		int otherLen = other.length();
 		int retValue = 0;
@@ -280,11 +319,24 @@ public class MyContentProvider extends ContentProvider {
 	}
 
 	private void msgFromExistingNode(MessageObject msg){
-		if(msg.isForwarded()){
-			
+		if(msg.getMessageType() == MessageType.NEW_NODE_ACCEPT){
+			current_Node.successor = new Node(msg.getKey(),msg.getValue());
+			current_Node.predecessor = new Node(msg.getNodeId(),genHash(msg.getNodeId()));
 		}
-		else if(msg.isReply()){
-			
+		else if(msg.getMessageType() == MessageType.CONNECT_NEXT_NODE){
+			sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.NEW_NODE_JOIN ,current_Node.successor.node_id,current_Node.successor.hashValue);
+		}
+		else if(msg.getMessageType() == MessageType.MSG_FORWARD){
+			String keyHashValue = genHash(msg.getKey());
+			if((hashCompare(current_Node.hashValue, keyHashValue) == 0) || isHashBetweenHashes(current_Node.hashValue, current_Node.successor.hashValue, keyHashValue) ){
+				// FIND MESSAGE AND REPLY TO SOURCE
+			}
+			else{
+				//FORWARD TO NEXT NODE. (ATTACHING SOURCE NODE_ID)
+			}
+		}
+		else if(msg.getMessageType() == MessageType.MSG_REPLY){
+			//DELIVER MESSAGE TO CLIENT
 		}
 		else{
 			Log.d("EXCEPTION", "Invalid message received.");
@@ -329,7 +381,7 @@ public class MyContentProvider extends ContentProvider {
 							e.printStackTrace();
 							Log.d("EXCEPTION","ServerRunnable.run(): "+e.getMessage());
 						}
-						if( msg.isNewClient()){
+						if( msg.getMessageType() == MessageType.NEW_NODE_JOIN){
 							//check if new_node
 							newClientSocket(client,msg);
 							//if msg existing_node
@@ -349,10 +401,9 @@ public class MyContentProvider extends ContentProvider {
 				Log.d("SR","Error Creating Socket.");
 				e.printStackTrace();
 			}
-
 		}
 	}
-	
+
 
 	/**
 	 * @author sravan
@@ -362,33 +413,37 @@ public class MyContentProvider extends ContentProvider {
 
 		private String node_id;
 		private int port_number;
-		//private GroupMessengerActivity activity;
 		private Socket client;
 
-		//private Handler UI_Handler;
 		private String ip_addr = MyContentProvider.SERVER_ADDRESS;
 
 		private boolean isNewClient = false;
 		private boolean isForwarded = false;
 		private boolean isReply = false;
+		private boolean connectToNext = false;
+		private MessageType messageType;
 		private String key = "";
 		private String value = "";
-		
+
 		/**
-		 * 
 		 * @param node_id
 		 * @param port_number
 		 * @param isNewClient
 		 * @param isForwarded
 		 * @param isReply
+		 * @param connectToNext
+		 * @param key
+		 * @param value
 		 */
 		public ClientRunnable(String node_id,int port_number, boolean isNewClient, 
-				boolean isForwarded, boolean isReply, String key, String value){
+				boolean isForwarded, boolean isReply, boolean connectToNext, MessageType messageType, String key, String value){
 			this.node_id = node_id;
 			this.port_number = port_number;
 			this.isForwarded = isForwarded;
 			this.isNewClient = isNewClient;
 			this.isReply = isReply;
+			this.connectToNext = connectToNext;
+			this.messageType = messageType;
 			this.key = key;
 			this.value= value;
 		}
@@ -400,7 +455,7 @@ public class MyContentProvider extends ContentProvider {
 				client = new Socket(addr, port_number);
 
 				Log.d("CR","Connected to Server!!");
-				(new ObjectOutputStream(client.getOutputStream())).writeObject(new MessageObject(isForwarded, isNewClient, isReply, node_id, key, value));
+				(new ObjectOutputStream(client.getOutputStream())).writeObject(new MessageObject(isForwarded, isNewClient, isReply, connectToNext, messageType, node_id, key, value));
 
 			} catch (IOException e) {
 				Log.d("EXCEPTION","Error creating client socket: "+e.getMessage());
