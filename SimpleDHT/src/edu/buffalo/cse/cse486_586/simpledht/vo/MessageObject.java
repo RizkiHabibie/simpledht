@@ -8,9 +8,12 @@ package edu.buffalo.cse.cse486_586.simpledht.vo;
  *
  */
 public class MessageObject {
+	
 	private boolean isForwarded = false;
 	private boolean isNewClient = false;
 	private boolean isReply = false;
+	private boolean connectToNext = false;
+	private MessageType messageType;
 	private String nodeId;
 	private String key;
 	private String value;
@@ -24,16 +27,32 @@ public class MessageObject {
 	 * @param value
 	 */
 	public MessageObject(boolean isForwarded, boolean isNewClient,
-			boolean isReply, String isNodeId, String key, String value) {
+			boolean isReply, boolean connectToNext, MessageType messageType, String isNodeId, String key, String value) {
 		super();
 		this.isForwarded = isForwarded;
 		this.isNewClient = isNewClient;
 		this.isReply = isReply;
+		this.connectToNext = connectToNext;
+		this.messageType = messageType;
 		this.nodeId = isNodeId;
 		this.key = key;
 		this.value = value;
 	}
 	
+	/**
+	 * @return the messageType
+	 */
+	public MessageType getMessageType() {
+		return messageType;
+	}
+
+	/**
+	 * @param messageType the messageType to set
+	 */
+	public void setMessageType(MessageType messageType) {
+		this.messageType = messageType;
+	}
+
 	/**
 	 * @return the isReply
 	 */
