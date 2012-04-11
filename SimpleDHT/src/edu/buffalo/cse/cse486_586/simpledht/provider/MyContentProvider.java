@@ -3,10 +3,7 @@
  */
 package edu.buffalo.cse.cse486_586.simpledht.provider;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
@@ -22,12 +19,10 @@ import edu.buffalo.cse.cse486_586.simpledht.vo.MessageType;
 import android.content.ContentProvider;
 import android.content.ContentUris;
 import android.content.ContentValues;
-import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
-import android.telephony.TelephonyManager;
 import android.util.Log;
 
 /**
@@ -44,8 +39,8 @@ public class MyContentProvider extends ContentProvider {
 	private static final int SERVER_CONNECT_PORT = 11108;
 	private static final String SERVER_ADDRESS = "10.0.2.2";
 	private Node current_Node = new Node();
-	
-	private boolean isWindows = true;
+
+	private boolean isWindows = false;
 
 	public static String nodeID;
 
@@ -68,7 +63,7 @@ public class MyContentProvider extends ContentProvider {
 	public Uri insert(Uri uri, ContentValues values) {
 		SQLiteDatabase db = dataHelper.getWritableDatabase();
 
-		String key = values.getAsString(dataHelper.COLUMN_KEY);
+		String key = values.getAsString(MyDataHelper.COLUMN_KEY);
 		if(key.equals("0"))
 			dataHelper.onCreate(db);
 
@@ -92,10 +87,25 @@ public class MyContentProvider extends ContentProvider {
 				null,
 				1);
 
-		init();
-		Log.d("MCP","MyContentProvider.onCreate(): Begin");
+		// Instead of calling init directly, introduce a delay, onCreate must be finished
+		(new Thread(new InitRunnable())).start();
+		Log.d("S_DHT","MCP: "+"MyContentProvider.onCreate(): Begin");
 		//return false;
 		return true;
+	}
+
+	private class InitRunnable implements Runnable{
+		@Override
+		public void run() {
+			try{
+				Thread.sleep(2000);
+			}
+			catch(Exception e){
+				e.printStackTrace();
+			}
+			init();
+		}
+
 	}
 
 	@Override
@@ -166,13 +176,14 @@ public class MyContentProvider extends ContentProvider {
 		}
 		return SERVER_BIND_PORT;
 	}
-	
+
 	private void init(){		
 		// Every node will have a server.
 		Thread serverThread = new Thread(new ServerRunnable(getServerPort(), nodeID));
 		current_Node.set(nodeID, genHash(nodeID));
 		current_Node.successor = current_Node;
 		current_Node.predecessor = current_Node;
+		Log.d("S_DHT","INIT: "+nodeID);
 		try{
 			Thread.sleep(2000);
 			serverThread.start();
@@ -198,7 +209,7 @@ public class MyContentProvider extends ContentProvider {
 		Cursor result = this.query(MyContentProvider.CONTENT_URI, null, "0", null, null);
 		if(result != null && result.getCount() > 0 ){
 			result.moveToFirst();
-			Log.d("MCP", result.getString(0) + " : " + result.getString(1));
+			Log.d("S_DHT", "MCP: "+result.getString(0) + " : " + result.getString(1));
 		}
 		/*try{
 			if(result.getCount() > 0)
@@ -225,15 +236,19 @@ public class MyContentProvider extends ContentProvider {
 		// Intentionally created new objects.
 		String key = new String(l_key);
 		String value = new String(l_value);
-		if(!nodeID.equals(CENTRAL_SERVER_ID)){ // If not 5554. (New Node JOIN.)
-			Thread newConnection = new Thread(
-					new ClientRunnable(nodeID, SERVER_CONNECT_PORT,false, false, false, false, messageType, key, value));
-			newConnection.start();
-		}
+		//if(!nodeID.equals(CENTRAL_SERVER_ID)){ // If not 5554. (New Node JOIN.)
+		Thread newConnection = new Thread(
+				new ClientRunnable(node_id, port_number,false, false, false, false, messageType, key, value));
+		newConnection.start();
+		//}
 	}
 
 	int resolvePortNumber(String node_id){
 		return Integer.parseInt(node_id)*2;
+	}
+	
+	public void printAdjacentNodes(){
+		Log.d("S_DHT",nodeID+" --> Successor: "+current_Node.successor.node_id + ",  Predecessor: " + current_Node.predecessor.node_id );
 	}
 
 	/**
@@ -242,11 +257,13 @@ public class MyContentProvider extends ContentProvider {
 	 * @param msg
 	 */
 	private void newClientSocket(Socket socket, MessageObject msg){
-		if(nodeID == CENTRAL_SERVER_ID){
+		Log.d("S_DHT","MCP: "+"in newClientSocket()");
+		if(nodeID.equals(CENTRAL_SERVER_ID)){
 			if(current_Node.hashValue.equals(current_Node.successor.hashValue)){
 				// Only one node in system. // ACCEPT REQUEST
 				//Node succ = current_Node.successor;
 				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.NEW_NODE_ACCEPT ,current_Node.successor.node_id,current_Node.successor.hashValue);
+				//current_Node.predecessor = new Node(msg.getNodeId(), genHash(msg.getNodeId())); -- msg from node is expected (or) no change required
 				current_Node.successor = new Node(msg.getNodeId(), genHash(msg.getNodeId()));
 			}
 			else if(isHashBetweenHashes(current_Node.hashValue, current_Node.successor.hashValue, genHash(msg.getNodeId()))){
@@ -272,6 +289,7 @@ public class MyContentProvider extends ContentProvider {
 				sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.CONNECT_NEXT_NODE ,current_Node.successor.node_id,current_Node.successor.hashValue);
 			}
 		}
+		printAdjacentNodes();
 	}
 
 	// 0-100
@@ -281,7 +299,7 @@ public class MyContentProvider extends ContentProvider {
 			return false;
 		}
 		else if(hashCompare(next, current) > 0){
-			if(hashCompare(find, current) > 0 && hashCompare(next, find) < 0){
+			if(hashCompare(find, current) > 0 && hashCompare(next, find) > 0){
 				return true;
 			}
 			else{
@@ -323,17 +341,19 @@ public class MyContentProvider extends ContentProvider {
 		else if(otherLen > 0){
 			return -1;
 		}
-		Log.d("HASH", "This must not be printed");
+		Log.d("S_DHT","HASH:"+ " This must not be printed");
 		return 0;
 	}
 
 	private void msgFromExistingNode(MessageObject msg){
+		Log.d("S_DHT","MCP: "+"in msgFromExistingNode()");
 		if(msg.getMessageType() == MessageType.NEW_NODE_ACCEPT){
 			current_Node.successor = new Node(msg.getKey(),msg.getValue());
 			current_Node.predecessor = new Node(msg.getNodeId(),genHash(msg.getNodeId()));
+			sendMessageToOtherNode(nodeID,resolvePortNumber(current_Node.successor.node_id), MessageType.SET_NEW_PREDECESSOR ,current_Node.successor.node_id,current_Node.successor.hashValue);
 		}
 		else if(msg.getMessageType() == MessageType.CONNECT_NEXT_NODE){
-			sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getNodeId()), MessageType.NEW_NODE_JOIN ,current_Node.successor.node_id,current_Node.successor.hashValue);
+			sendMessageToOtherNode(nodeID,resolvePortNumber(msg.getKey()), MessageType.NEW_NODE_JOIN ,current_Node.successor.node_id,current_Node.successor.hashValue);
 		}
 		else if(msg.getMessageType() == MessageType.MSG_FORWARD){
 			String keyHashValue = genHash(msg.getKey());
@@ -347,9 +367,13 @@ public class MyContentProvider extends ContentProvider {
 		else if(msg.getMessageType() == MessageType.MSG_REPLY){
 			//DELIVER MESSAGE TO CLIENT
 		}
-		else{
-			Log.d("EXCEPTION", "Invalid message received.");
+		else if(msg.getMessageType() == MessageType.SET_NEW_PREDECESSOR){
+			current_Node.predecessor = new Node(msg.getNodeId(),genHash(msg.getNodeId()));
 		}
+		else{
+			Log.d("S_DHT","EXCEPTION: "+ "Invalid message received.");
+		}
+		printAdjacentNodes();
 	}
 
 	private class ServerRunnable implements Runnable {
@@ -375,39 +399,42 @@ public class MyContentProvider extends ContentProvider {
 				server = new ServerSocket(portNumber);
 				//IS_SERVER_RUNNING = true;
 
-				Log.d("SR", "Server at " + nodeId + "binded to port " + portNumber);
+				Log.d("S_DHT","SR: "+ "Server at " + nodeId + "binded to port " + portNumber);
 				while(true){
 					try {
 						client = server.accept();
-						Log.d("SR","Client Connected!!");
+						Log.d("S_DHT","SR: "+"Client Connected!!");
 
 						// Read a message immediately after connection.
 						ObjectInputStream ois = new ObjectInputStream(client.getInputStream());
 						MessageObject msg = null;
 						try {
 							msg = (MessageObject)ois.readObject();
+							System.out.println(msg);
+							if( msg.getMessageType() == MessageType.NEW_NODE_JOIN){
+								//check if new_node
+								Log.d("S_DHT","SR: "+"Calling: newClientSocket()");
+								newClientSocket(client,msg);
+								//if msg existing_node
+							}
+							else {
+								msgFromExistingNode(msg);
+							}
+
 						} catch (ClassNotFoundException e) {
 							e.printStackTrace();
-							Log.d("EXCEPTION","ServerRunnable.run(): "+e.getMessage());
-						}
-						if( msg.getMessageType() == MessageType.NEW_NODE_JOIN){
-							//check if new_node
-							newClientSocket(client,msg);
-							//if msg existing_node
-						}
-						else {
-							msgFromExistingNode(msg);
+							Log.d("S_DHT","EXCEPTION: "+"ServerRunnable.run(): "+e.getMessage());
 						}
 
 					}
 					catch(IOException e){
-						Log.d("SR", "Server generated an exception");
+						Log.d("S_DHT","SR: " + "Server generated an exception");
 					}
 				}
 				//boolean isClientAlive = true;
 
 			} catch (IOException e) {
-				Log.d("SR","Error Creating Socket.");
+				Log.d("S_DHT","SR: "+"Error Creating Socket.");
 				e.printStackTrace();
 			}
 		}
@@ -463,11 +490,11 @@ public class MyContentProvider extends ContentProvider {
 				InetAddress addr = InetAddress.getByName(ip_addr);
 				client = new Socket(addr, port_number);
 
-				Log.d("CR","Connected to Server!!");
+				Log.d("S_DHT","CR: "+"Connected to Server!!");
 				(new ObjectOutputStream(client.getOutputStream())).writeObject(new MessageObject(isForwarded, isNewClient, isReply, connectToNext, messageType, node_id, key, value));
 
 			} catch (IOException e) {
-				Log.d("EXCEPTION","Error creating client socket: "+e.getMessage());
+				Log.d("S_DHT","EXCEPTION: "+"Error creating client socket: "+e.getMessage());
 				//e.printStackTrace();
 			}
 

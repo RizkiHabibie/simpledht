@@ -3,11 +3,13 @@
  */
 package edu.buffalo.cse.cse486_586.simpledht.vo;
 
+import java.io.Serializable;
+
 /**
  * @author sravan
  *
  */
-public class MessageObject {
+public class MessageObject implements Serializable{
 	
 	private boolean isForwarded = false;
 	private boolean isNewClient = false;
@@ -17,6 +19,10 @@ public class MessageObject {
 	private String nodeId;
 	private String key;
 	private String value;
+	
+	public String toString(){
+		return messageType +", " + nodeId +", " + key +", " + value;
+	}
 	
 	/**
 	 * @param isForwarded
