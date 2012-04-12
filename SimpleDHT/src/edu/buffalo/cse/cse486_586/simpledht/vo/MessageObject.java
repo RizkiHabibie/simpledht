@@ -4,6 +4,9 @@
 package edu.buffalo.cse.cse486_586.simpledht.vo;
 
 import java.io.Serializable;
+import java.util.Map;
+
+import android.net.Uri;
 
 /**
  * @author sravan
@@ -19,15 +22,21 @@ public class MessageObject implements Serializable{
 	private String nodeId;
 	private String key;
 	private String value;
+	private String uri;
+	private Map<String,String> records;
+	
 	
 	public String toString(){
 		return messageType +", " + nodeId +", " + key +", " + value;
 	}
 	
 	/**
+	 * 
 	 * @param isForwarded
 	 * @param isNewClient
 	 * @param isReply
+	 * @param connectToNext
+	 * @param messageType
 	 * @param isNodeId
 	 * @param key
 	 * @param value
@@ -45,6 +54,37 @@ public class MessageObject implements Serializable{
 		this.value = value;
 	}
 	
+
+	
+	
+	/**
+	 * @return the records
+	 */
+	public Map<String, String> getRecords() {
+		return records;
+	}
+
+	/**
+	 * @param records the records to set
+	 */
+	public void setRecords(Map<String, String> records) {
+		this.records = records;
+	}
+
+	/**
+	 * @return the uri
+	 */
+	public String getUri() {
+		return uri;
+	}
+
+	/**
+	 * @param uri the uri to set
+	 */
+	public void setUri(String uri) {
+		this.uri = uri;
+	}
+
 	/**
 	 * @return the messageType
 	 */
