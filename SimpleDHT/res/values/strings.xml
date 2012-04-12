@@ -3,5 +3,7 @@
 
     <string name="hello">Hello World, SimpleDHTActivity!</string>
     <string name="app_name">SimpleDHT</string>
+    <string name="insertRecord">Insert Record</string>
+    <string name="fetchRecord">Fetch Record</string>
 
 </resources>
