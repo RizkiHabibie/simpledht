@@ -60,8 +60,12 @@ public class MyContentProvider extends ContentProvider {
 
 	@Override
 	public int delete(Uri uri, String selection, String[] selectionArgs) {
+		SQLiteDatabase db = dataHelper.getWritableDatabase();
 
-		return 0;
+		int no_of_records = db.delete(MyDataHelper.TABLE_NAME, null, null);
+
+        getContext().getContentResolver().notifyChange(uri, null);
+        return no_of_records;
 	}
 
 	@Override
@@ -78,7 +82,8 @@ public class MyContentProvider extends ContentProvider {
 		String value = values.getAsString(MyDataHelper.COLUMN_VALUE);
 
 		// forwared request, happens only in case of new_req. (fwded req doesn't come here.
-		if(!isHashBetweenHashes(current_Node.predecessor.hashValue, current_Node.hashValue, genHash(key))){
+		if( hashCompare(current_Node.predecessor.hashValue, current_Node.hashValue) != 0 && // When only one node exists in the system.
+				!isHashBetweenHashes(current_Node.predecessor.hashValue, current_Node.hashValue, genHash(key))){
 			sendMessageToOtherNode(nodeID,resolvePortNumber(current_Node.successor.node_id), MessageType.INSERT_RECORD ,key, value);
 			try {
 				String ret_uri = uriBlockingQueue.take();
@@ -94,8 +99,18 @@ public class MyContentProvider extends ContentProvider {
 			}
 		}
 
-
-
+		Cursor result = query(MyContentProvider.CONTENT_URI, null, key, null, null);
+		try{
+			if(result != null && result.getCount() > 0){
+				// Update
+				update(uri, values, key, null);
+				return uri;
+			}
+		}
+		catch(Exception e){
+			Log.d("S_DHT", "Exception: Activity : "+e.getMessage());
+		}
+		
 		SQLiteDatabase db = dataHelper.getWritableDatabase();
 
 		/*String key = values.getAsString(MyDataHelper.COLUMN_KEY);
@@ -150,7 +165,10 @@ public class MyContentProvider extends ContentProvider {
 		String key = selection;
 
 		// forwared request, happens only in case of new_req. (fwded req doesn't come here.
-		if(!isHashBetweenHashes(current_Node.predecessor.hashValue, current_Node.hashValue, genHash(key))){
+		// selection is null for 'Fetch all data'
+		if(selection!= null && 
+				hashCompare(current_Node.predecessor.hashValue, current_Node.hashValue) != 0 && // When only one node exists in the system.
+				!isHashBetweenHashes(current_Node.predecessor.hashValue, current_Node.hashValue, genHash(key))){
 			sendMessageToOtherNode(nodeID,resolvePortNumber(current_Node.successor.node_id), MessageType.MSG_REQUEST ,key, "");
 			try {
 				Map<String, String> ret_uri = cursorBlockingQueue.take();
@@ -191,7 +209,19 @@ public class MyContentProvider extends ContentProvider {
 	public int update(Uri uri, ContentValues values, String selection,
 			String[] selectionArgs) {
 		// IMPLEMENT_THIS
-		return 0;
+		SQLiteDatabase db = dataHelper.getWritableDatabase();
+
+		if(selection == null){
+			return 0;
+		}
+		else{
+			selection = MyDataHelper.COLUMN_KEY + " = '" + selection + "'";
+		}
+		
+		int id = db.update(MyDataHelper.TABLE_NAME, values, selection, null);
+		getContext().getContentResolver().notifyChange(uri, null);
+
+		return id;
 	}
 
 	private class Node{
