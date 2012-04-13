@@ -5,5 +5,7 @@
     <string name="app_name">SimpleDHT</string>
     <string name="insertRecord">Insert Record</string>
     <string name="fetchRecord">Fetch Record</string>
-
+	<string name="test">Test</string>
+	<string name="dump">Dump</string>
+	<string name="deleteDump"> Delete Dump </string>
 </resources>
