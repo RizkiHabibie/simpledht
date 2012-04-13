@@ -14,7 +14,7 @@ import android.database.sqlite.SQLiteOpenHelper;
  */
 public class MyDataHelper extends SQLiteOpenHelper {
 	
-	public final static String TABLE_NAME = "KeyLookup";
+	public final static String TABLE_NAME  = "KeyLookup";
 	public final static String COLUMN_KEY = "provider_key";
 	public final static String COLUMN_VALUE = "provider_value";
 	
